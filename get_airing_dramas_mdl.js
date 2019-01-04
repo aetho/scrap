@@ -2,28 +2,46 @@
 
 const puppeteer = require('puppeteer');
 
-const url = 'https://wiki.d-addicts.com/List_of_Dramas_aired_in_Korea_by_Network_in_2018';
-const reYear = 2018;
+let url = 'https://mydramalist.com/search?adv=titles&ty=68&co=3&st=1&so=top&page=1';
+let dramas = [];
+
+async function GetDramas(browser) {
+	const page = await browser.newPage();
+
+	// goto URL and wait until page has loaded.
+	await page.goto(url, {
+		waitUntil: 'networkidle2'
+	});
+
+	let pageDramas = await page.$$('.m-t > *[id^="mdl"] h6 > a:nth-child(1)');
+
+	for (let i = 0; i < pageDramas.length; i++) {
+		pageDramas[i] = (await (await pageDramas[i].getProperty('href')).jsonValue());
+	}
+
+	// push all pageDramas to dramas
+	dramas = [...dramas, ...pageDramas];
+
+	let nextBtn = await page.$('li.page-item.next > a');
+	if (nextBtn) {
+		// Get the url that the next button points to.
+		url = (await (await nextBtn.getProperty('href')).jsonValue());
+
+		await page.close();
+		await GetDramas(browser);
+	} else {
+		await page.close();
+	}
+}
 
 (async () => {
 	const browser = await puppeteer.launch();
-	const page = await browser.newPage();
 
-	await page.goto(url);
-
-	await page.waitForSelector('.mw-parser-output'); // Make dramas have loaded before continuing
-	const airing = await page.$$('#airing > td:nth-child(3) > a:nth-child(1)'); // Get drama anchors elements
-
-
-	// extract href attribute from anchors
-	for (let i = 0; i < airing.length; i++) {
-		let dramaURL = await (await airing[i].getProperty('href')).jsonValue();
-
-		dramaURL = dramaURL.replace('https://wiki.d-addicts.com/', 'https://mydramalist.com/search?q=');
-		dramaURL += `&adv=titles&re=${reYear},${reYear}&adv=titles&ty=68&co=3&re=2018,2018&so=relevance`;
-		dramaURL = dramaURL.replace(new RegExp('_', 'g'), '+');
-		
-		console.log(dramaURL);
+	await GetDramas(browser);
+	
+	for (var i = 0, len = dramas.length; i < len; i++) {
+		console.log(dramas[i]);
 	}
+
 	await browser.close();
 })();
